@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NewsPulse — AI-Powered News Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080c12;
+    --bg2: #0d1117;
+    --bg3: #111820;
+    --bg4: #161e28;
+    --border: rgba(255,255,255,0.07);
+    --border-bright: rgba(255,255,255,0.14);
+    --text: #e8edf3;
+    --text-muted: #6b7d8f;
+    --text-dim: #3a4a5a;
+    --accent: #00d4ff;
+    --accent2: #7c3aed;
+    --green: #10d98a;
+    --red: #ff4d6d;
+    --yellow: #ffb800;
+    --pos: #10d98a;
+    --neg: #ff4d6d;
+    --neu: #ffb800;
+    --font-mono: 'Space Mono', monospace;
+    --font-body: 'DM Sans', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid noise overlay */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: 
+      repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255,255,255,0.015) 39px, rgba(255,255,255,0.015) 40px),
+      repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(255,255,255,0.015) 39px, rgba(255,255,255,0.015) 40px);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ---- HEADER ---- */
+  header {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(8,12,18,0.92);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    display: flex; align-items: center; gap: 2rem;
+    height: 60px;
+  }
+
+  .logo {
+    font-family: var(--font-mono);
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+    display: flex; align-items: center; gap: 8px;
+    white-space: nowrap;
+  }
+
+  .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0,212,255,0.4); } 50% { opacity: 0.8; box-shadow: 0 0 0 6px rgba(0,212,255,0); } }
+
+  .header-tabs {
+    display: flex; gap: 0; margin-left: auto;
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
+
+  .tab-btn {
+    background: transparent; border: none; cursor: pointer;
+    color: var(--text-muted); font-family: var(--font-mono); font-size: 0.7rem;
+    padding: 0.45rem 1rem; letter-spacing: 0.5px; transition: all 0.2s;
+    border-right: 1px solid var(--border);
+  }
+  .tab-btn:last-child { border-right: none; }
+  .tab-btn:hover { color: var(--accent); background: rgba(0,212,255,0.05); }
+  .tab-btn.active { background: rgba(0,212,255,0.1); color: var(--accent); }
+
+  .refresh-btn {
+    background: transparent; border: 1px solid var(--border-bright);
+    color: var(--text-muted); font-family: var(--font-mono); font-size: 0.7rem;
+    padding: 0.45rem 1rem; border-radius: 6px; cursor: pointer;
+    letter-spacing: 0.5px; transition: all 0.2s;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .refresh-btn:hover { color: var(--accent); border-color: var(--accent); }
+  .refresh-btn svg { transition: transform 0.5s; }
+  .refresh-btn.spinning svg { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---- LAYOUT ---- */
+  #app { position: relative; z-index: 1; }
+
+  .view { display: none; padding: 1.5rem 2rem; }
+  .view.active { display: block; }
+
+  /* ---- LOADING ---- */
+  .loading-screen {
+    position: fixed; inset: 0; z-index: 200;
+    background: var(--bg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 1.5rem;
+  }
+  .loading-screen h2 { font-family: var(--font-mono); font-size: 1.2rem; color: var(--accent); }
+  .loading-screen p { color: var(--text-muted); font-size: 0.85rem; }
+  .loader-bar {
+    width: 300px; height: 2px; background: var(--bg3);
+    border-radius: 2px; overflow: hidden;
+  }
+  .loader-bar-fill {
+    height: 100%; width: 30%; background: var(--accent);
+    animation: load 1.5s ease-in-out infinite;
+  }
+  @keyframes load { 0% { transform: translateX(-100%); } 100% { transform: translateX(400%); } }
+  .hidden { display: none !important; }
+
+  /* ---- STAT CARDS ---- */
+  .stats-row {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem;
+  }
+  .stat-card {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 12px; padding: 1.2rem 1.4rem;
+    position: relative; overflow: hidden;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+  .stat-card:hover { border-color: var(--border-bright); transform: translateY(-1px); }
+  .stat-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.3;
+  }
+  .stat-label { font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 0.6rem; }
+  .stat-value { font-family: var(--font-mono); font-size: 2.2rem; font-weight: 700; color: var(--text); line-height: 1; }
+  .stat-value span { color: var(--accent); }
+  .stat-sub { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.4rem; }
+
+  /* ---- GRID ---- */
+  .dash-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;
+  }
+  .dash-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+  .full-width { grid-column: 1 / -1; }
+
+  /* ---- PANEL ---- */
+  .panel {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 12px; padding: 1.2rem 1.4rem;
+    transition: border-color 0.2s;
+  }
+  .panel:hover { border-color: var(--border-bright); }
+  .panel-title {
+    font-family: var(--font-mono); font-size: 0.68rem;
+    color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase;
+    margin-bottom: 1.2rem; display: flex; align-items: center; gap: 8px;
+  }
+  .panel-title::before {
+    content: ''; width: 6px; height: 6px; border-radius: 1px;
+    background: var(--accent); display: block;
+  }
+
+  /* ---- SENTIMENT DONUT ---- */
+  .donut-wrap {
+    display: flex; align-items: center; gap: 2rem;
+  }
+  .donut-svg { flex-shrink: 0; }
+  .donut-legend { display: flex; flex-direction: column; gap: 0.6rem; flex: 1; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .legend-label { color: var(--text-muted); }
+  .legend-val { margin-left: auto; font-family: var(--font-mono); font-size: 0.75rem; color: var(--text); }
+
+  /* ---- TOPIC BARS ---- */
+  .topic-bar-item { margin-bottom: 0.85rem; }
+  .topic-bar-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.3rem; }
+  .topic-bar-name { font-size: 0.78rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 65%; }
+  .topic-bar-count { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); }
+  .bar-track { height: 4px; background: var(--bg4); border-radius: 2px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, var(--accent2), var(--accent)); transition: width 0.8s ease; }
+
+  /* ---- SOURCE LIST ---- */
+  .source-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 0.5rem 0; border-bottom: 1px solid var(--border);
+    font-size: 0.82rem;
+  }
+  .source-item:last-child { border-bottom: none; }
+  .source-rank { font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-dim); width: 18px; }
+  .source-name { color: var(--text); flex: 1; text-transform: capitalize; }
+  .source-badge {
+    font-family: var(--font-mono); font-size: 0.65rem;
+    padding: 2px 8px; border-radius: 99px;
+    background: rgba(0,212,255,0.1); color: var(--accent); border: 1px solid rgba(0,212,255,0.2);
+  }
+
+  /* ---- KEYWORD CLOUD ---- */
+  .keyword-cloud { display: flex; flex-wrap: wrap; gap: 8px; }
+  .kw-tag {
+    font-family: var(--font-mono); font-size: 0.68rem;
+    padding: 4px 10px; border-radius: 4px; cursor: default;
+    border: 1px solid var(--border); color: var(--text-muted);
+    transition: all 0.2s;
+  }
+  .kw-tag:hover { border-color: var(--accent); color: var(--accent); background: rgba(0,212,255,0.05); }
+
+  /* ---- TIMELINE ---- */
+  .timeline-chart { display: flex; align-items: flex-end; gap: 3px; height: 80px; }
+  .tl-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .tl-bar {
+    width: 100%; background: rgba(0,212,255,0.25);
+    border-radius: 2px 2px 0 0; transition: height 0.6s ease;
+    cursor: pointer; position: relative;
+  }
+  .tl-bar:hover { background: var(--accent); }
+  .tl-label { font-family: var(--font-mono); font-size: 0.5rem; color: var(--text-dim); }
+
+  /* ---- ARTICLES VIEW ---- */
+  .articles-toolbar {
+    display: flex; align-items: center; gap: 1rem; margin-bottom: 1.2rem; flex-wrap: wrap;
+  }
+  .search-box {
+    flex: 1; min-width: 200px;
+    background: var(--bg3); border: 1px solid var(--border); border-radius: 8px;
+    padding: 0.55rem 1rem; color: var(--text); font-family: var(--font-body); font-size: 0.85rem;
+    outline: none; transition: border-color 0.2s;
+  }
+  .search-box:focus { border-color: var(--accent); }
+  .search-box::placeholder { color: var(--text-dim); }
+
+  .filter-select {
+    background: var(--bg3); border: 1px solid var(--border); border-radius: 8px;
+    padding: 0.55rem 0.8rem; color: var(--text-muted); font-family: var(--font-mono); font-size: 0.7rem;
+    outline: none; cursor: pointer; transition: border-color 0.2s;
+    -webkit-appearance: none;
+  }
+  .filter-select:focus { border-color: var(--accent); }
+
+  .articles-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1rem;
+  }
+
+  .article-card {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 12px; overflow: hidden;
+    transition: all 0.2s; cursor: pointer;
+    display: flex; flex-direction: column;
+  }
+  .article-card:hover { border-color: var(--border-bright); transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+
+  .article-img {
+    width: 100%; height: 140px; object-fit: cover;
+    background: var(--bg4); display: block;
+  }
+  .article-img-placeholder {
+    width: 100%; height: 140px; background: var(--bg4);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-dim);
+  }
+  .article-body { padding: 1rem; flex: 1; display: flex; flex-direction: column; }
+  .article-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 0.6rem; flex-wrap: wrap; }
+  .article-source { font-family: var(--font-mono); font-size: 0.62rem; color: var(--accent); letter-spacing: 0.5px; text-transform: uppercase; }
+  .article-date { font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-dim); }
+  .article-title { font-size: 0.88rem; font-weight: 500; line-height: 1.45; color: var(--text); margin-bottom: 0.5rem; flex: 1; }
+  .article-desc { font-size: 0.76rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 0.8rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .article-footer { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+  .sentiment-chip {
+    font-family: var(--font-mono); font-size: 0.6rem; padding: 2px 8px;
+    border-radius: 99px; font-weight: 700;
+  }
+  .sentiment-chip.Positive { background: rgba(16,217,138,0.12); color: var(--pos); border: 1px solid rgba(16,217,138,0.25); }
+  .sentiment-chip.Negative { background: rgba(255,77,109,0.12); color: var(--neg); border: 1px solid rgba(255,77,109,0.25); }
+  .sentiment-chip.Neutral  { background: rgba(255,184,0,0.1); color: var(--neu); border: 1px solid rgba(255,184,0,0.2); }
+
+  .topic-chip {
+    font-family: var(--font-mono); font-size: 0.6rem; padding: 2px 8px;
+    border-radius: 4px; background: rgba(124,58,237,0.12); color: #a78bfa;
+    border: 1px solid rgba(124,58,237,0.25); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;
+  }
+
+  .read-link {
+    margin-left: auto; font-family: var(--font-mono); font-size: 0.6rem;
+    color: var(--text-dim); text-decoration: none; transition: color 0.2s;
+  }
+  .read-link:hover { color: var(--accent); }
+
+  /* ---- TOPICS VIEW ---- */
+  .topics-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+  .topic-card {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 12px; padding: 1.4rem;
+    transition: all 0.2s;
+  }
+  .topic-card:hover { border-color: rgba(124,58,237,0.4); transform: translateY(-1px); }
+  .topic-num { font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-dim); margin-bottom: 0.5rem; }
+  .topic-name { font-size: 0.95rem; font-weight: 600; color: var(--text); margin-bottom: 0.8rem; line-height: 1.3; }
+  .topic-kws { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 1rem; }
+  .topic-kw { font-family: var(--font-mono); font-size: 0.6rem; padding: 2px 7px; border-radius: 3px; background: rgba(255,255,255,0.05); color: var(--text-muted); border: 1px solid var(--border); }
+  .topic-stats-row { display: flex; gap: 1rem; }
+  .topic-stat { font-family: var(--font-mono); font-size: 0.65rem; }
+  .topic-stat-label { color: var(--text-dim); }
+  .topic-stat-val { color: var(--text); }
+
+  /* ---- SENTIMENT ---- */
+  .sent-bar-item { margin-bottom: 1rem; }
+  .sent-bar-header { display: flex; justify-content: space-between; margin-bottom: 0.3rem; font-size: 0.78rem; }
+  .sent-bar-name { color: var(--text); max-width: 60%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sent-score { font-family: var(--font-mono); font-size: 0.7rem; }
+  .sent-bar-track { height: 6px; background: var(--bg4); border-radius: 3px; overflow: hidden; }
+  .sent-bar-fill { height: 100%; border-radius: 3px; }
+
+  /* ---- ACCURACY BADGE ---- */
+  .accuracy-ring {
+    display: flex; flex-direction: column; align-items: center; gap: 0.5rem; padding: 1.5rem 0;
+  }
+  .acc-number { font-family: var(--font-mono); font-size: 3rem; font-weight: 700; color: var(--green); }
+  .acc-label { font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-muted); letter-spacing: 1px; }
+
+  /* ---- SCROLLBAR ---- */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 2px; }
+
+  /* ---- RESPONSIVE ---- */
+  @media (max-width: 900px) {
+    .stats-row { grid-template-columns: 1fr 1fr; }
+    .dash-grid, .dash-grid.three { grid-template-columns: 1fr; }
+    header { padding: 0 1rem; }
+    .view { padding: 1rem; }
+  }
+
+  /* Animate in */
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+  .animate { animation: fadeUp 0.4s ease forwards; }
+  .animate-delay-1 { animation-delay: 0.05s; opacity: 0; }
+  .animate-delay-2 { animation-delay: 0.1s; opacity: 0; }
+  .animate-delay-3 { animation-delay: 0.15s; opacity: 0; }
+  .animate-delay-4 { animation-delay: 0.2s; opacity: 0; }
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div class="loading-screen" id="loadingScreen">
+  <div class="logo"><div class="logo-dot"></div>NewsIntel</div>
+  <div class="loader-bar"><div class="loader-bar-fill"></div></div>
+  <h2>Processing news data…</h2>
+  <p>Fetching articles · Running TF-IDF · Training sentiment model</p>
+</div>
+
+<!-- HEADER -->
+<header>
+  <div class="logo"><div class="logo-dot"></div>NewsIntel</div>
+  <div class="header-tabs">
+    <button class="tab-btn active" onclick="switchView('overview')">OVERVIEW</button>
+    <button class="tab-btn" onclick="switchView('articles')">ARTICLES</button>
+    <button class="tab-btn" onclick="switchView('topics')">TOPICS</button>
+    <button class="tab-btn" onclick="switchView('sentiment')">SENTIMENT</button>
+  </div>
+  <button class="refresh-btn" id="refreshBtn" onclick="refreshData()">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <path d="M1 4v6h6M23 20v-6h-6"/>
+      <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+    </svg>
+    REFRESH
+  </button>
+</header>
+
+<div id="app">
+
+  <!-- OVERVIEW -->
+  <div class="view active" id="view-overview">
+    <div class="stats-row">
+      <div class="stat-card animate animate-delay-1">
+        <div class="stat-label">Total Articles</div>
+        <div class="stat-value" id="statTotal">—</div>
+        <div class="stat-sub">fetched from NewsAPI</div>
+      </div>
+      <div class="stat-card animate animate-delay-2">
+        <div class="stat-label">News Sources</div>
+        <div class="stat-value" id="statSources">—</div>
+        <div class="stat-sub">unique publishers</div>
+      </div>
+      <div class="stat-card animate animate-delay-3">
+        <div class="stat-label">Topics Found</div>
+        <div class="stat-value" id="statTopics">—</div>
+        <div class="stat-sub">via LDA modeling</div>
+      </div>
+      <div class="stat-card animate animate-delay-4">
+        <div class="stat-label">Model Accuracy</div>
+        <div class="stat-value" id="statAcc">—<span>%</span></div>
+        <div class="stat-sub">sentiment classifier</div>
+      </div>
+    </div>
+
+    <div class="dash-grid">
+      <div class="panel">
+        <div class="panel-title">Sentiment Distribution</div>
+        <div class="donut-wrap">
+          <svg class="donut-svg" id="donutSvg" width="120" height="120" viewBox="0 0 120 120"></svg>
+          <div class="donut-legend" id="donutLegend"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Topic Distribution</div>
+        <div id="topicBars"></div>
+      </div>
+    </div>
+
+    <div class="dash-grid">
+      <div class="panel">
+        <div class="panel-title">Top Sources</div>
+        <div id="sourceList"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Articles Over Time</div>
+        <div class="timeline-chart" id="timelineChart"></div>
+      </div>
+    </div>
+
+    <div class="dash-grid">
+      <div class="panel full-width">
+        <div class="panel-title">Trending Keywords</div>
+        <div class="keyword-cloud" id="keywordCloud"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ARTICLES -->
+  <div class="view" id="view-articles">
+    <div class="articles-toolbar">
+      <input class="search-box" id="searchInput" type="text" placeholder="Search articles…" oninput="filterArticles()">
+      <select class="filter-select" id="sentFilter" onchange="filterArticles()">
+        <option value="">All Sentiments</option>
+        <option value="Positive">Positive</option>
+        <option value="Neutral">Neutral</option>
+        <option value="Negative">Negative</option>
+      </select>
+      <select class="filter-select" id="topicFilter" onchange="filterArticles()">
+        <option value="">All Topics</option>
+      </select>
+      <select class="filter-select" id="sourceFilter" onchange="filterArticles()">
+        <option value="">All Sources</option>
+      </select>
+    </div>
+    <div class="articles-grid" id="articlesGrid"></div>
+  </div>
+
+  <!-- TOPICS -->
+  <div class="view" id="view-topics">
+    <div class="topics-grid" id="topicsGrid"></div>
+  </div>
+
+  <!-- SENTIMENT -->
+  <div class="view" id="view-sentiment">
+    <div class="dash-grid">
+      <div class="panel">
+        <div class="panel-title">Model Accuracy</div>
+        <div class="accuracy-ring">
+          <div class="acc-number" id="accNum">—</div>
+          <div class="acc-label">CLASSIFICATION ACCURACY</div>
+          <div style="font-size:0.75rem;color:var(--text-muted);text-align:center;margin-top:0.5rem;">Logistic Regression trained on TF-IDF<br>with VADER pseudo-labels</div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Sentiment Overview</div>
+        <div id="sentOverview"></div>
+      </div>
+    </div>
+    <div class="dash-grid">
+      <div class="panel full-width">
+        <div class="panel-title">Sentiment Score by Topic</div>
+        <div id="sentByTopic"></div>
+      </div>
+    </div>
+    <div class="dash-grid">
+      <div class="panel full-width">
+        <div class="panel-title">Article Sentiment Breakdown</div>
+        <div class="articles-grid" id="sentArticlesGrid" style="margin-top:0.5rem"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const BASE = 'http://localhost:5000';
+let allData = null;
+
+async function poll() {
+  try {
+    const r = await fetch(`${BASE}/api/status`);
+    const s = await r.json();
+    if (s.ready) {
+      await loadData();
+    } else if (s.error) {
+      document.querySelector('#loadingScreen p').textContent = 'Error: ' + s.error;
+    } else {
+      setTimeout(poll, 2000);
+    }
+  } catch(e) {
+    setTimeout(poll, 2000);
+  }
+}
+
+async function loadData() {
+  try {
+    console.log("Fetching data...");
+
+    const r = await fetch(`${BASE}/api/data`);
+    console.log("Response:", r);
+
+    allData = await r.json();
+    console.log("Data:", allData);
+
+    document.getElementById('loadingScreen').classList.add('hidden');
+
+    renderAll();
+
+  } catch (e) {
+    console.error("ERROR:", e);
+  }
+}
+
+function renderAll() {
+  const d = allData;
+  // Stats
+  document.getElementById('statTotal').innerHTML = d.stats.total;
+  document.getElementById('statSources').innerHTML = d.stats.sources;
+  document.getElementById('statTopics').innerHTML = d.stats.topics;
+  document.getElementById('statAcc').innerHTML = `${d.stats.model_accuracy}<span>%</span>`;
+  document.getElementById('accNum').textContent = d.stats.model_accuracy + '%';
+
+  renderDonut(d.sentiment_counts);
+  renderTopicBars(d.topic_counts);
+  renderSources(d.source_counts);
+  renderTimeline(d.timeline);
+  renderKeywords(d.top_keywords);
+  renderArticles(d.articles);
+  renderTopics(d.topic_keywords, d.topic_counts, d.sentiment_by_topic);
+  renderSentiment(d.sentiment_counts, d.sentiment_by_topic, d.articles);
+  populateFilters(d.articles);
+}
+
+// ---- DONUT ----
+function renderDonut(counts) {
+  const total = Object.values(counts).reduce((a,b)=>a+b,0);
+  const colors = {Positive:'#10d98a',Neutral:'#ffb800',Negative:'#ff4d6d'};
+  const svg = document.getElementById('donutSvg');
+  const cx=60,cy=60,r=44,stroke=14;
+  let startAngle = -Math.PI/2;
+  let paths = '';
+
+  const order = ['Positive','Neutral','Negative'].filter(k=>counts[k]);
+  for(const key of order){
+    const val = counts[key]||0;
+    const angle = (val/total)*2*Math.PI;
+    const x1=cx+r*Math.cos(startAngle), y1=cy+r*Math.sin(startAngle);
+    const x2=cx+r*Math.cos(startAngle+angle), y2=cy+r*Math.sin(startAngle+angle);
+    const large = angle>Math.PI?1:0;
+    paths += `<path d="M${x1},${y1} A${r},${r} 0 ${large},1 ${x2},${y2}" fill="none" stroke="${colors[key]}" stroke-width="${stroke}" stroke-linecap="butt" opacity="0.85"/>`;
+    startAngle+=angle;
+  }
+  svg.innerHTML = paths + `<text x="60" y="64" text-anchor="middle" fill="#e8edf3" font-family="Space Mono" font-size="14" font-weight="700">${total}</text>`;
+
+  const legend = document.getElementById('donutLegend');
+  legend.innerHTML = order.map(k=>`
+    <div class="legend-item">
+      <div class="legend-dot" style="background:${colors[k]}"></div>
+      <span class="legend-label">${k}</span>
+      <span class="legend-val">${counts[k]} <span style="color:var(--text-dim)">(${Math.round(counts[k]/total*100)}%)</span></span>
+    </div>`).join('');
+}
+
+// ---- TOPIC BARS ----
+function renderTopicBars(counts) {
+  const max = Math.max(...Object.values(counts));
+  const el = document.getElementById('topicBars');
+  el.innerHTML = Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([name,cnt])=>`
+    <div class="topic-bar-item">
+      <div class="topic-bar-header">
+        <span class="topic-bar-name" title="${name}">${name}</span>
+        <span class="topic-bar-count">${cnt}</span>
+      </div>
+      <div class="bar-track"><div class="bar-fill" style="width:${cnt/max*100}%"></div></div>
+    </div>`).join('');
+}
+
+// ---- SOURCES ----
+function renderSources(counts) {
+  const el = document.getElementById('sourceList');
+  const entries = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  el.innerHTML = entries.map(([name,cnt],i)=>`
+    <div class="source-item">
+      <span class="source-rank">${String(i+1).padStart(2,'0')}</span>
+      <span class="source-name">${name}</span>
+      <span class="source-badge">${cnt}</span>
+    </div>`).join('');
+}
+
+// ---- TIMELINE ----
+function renderTimeline(timeline) {
+  const el = document.getElementById('timelineChart');
+  if(!timeline||!timeline.length){el.innerHTML='<div style="color:var(--text-dim);font-size:0.75rem">No data</div>';return;}
+  const max = Math.max(...timeline.map(t=>t.count));
+  el.innerHTML = timeline.map(t=>{
+    const h = Math.max(6, (t.count/max)*76);
+    const label = t.date ? t.date.slice(5) : '';
+    return `<div class="tl-col">
+      <div class="tl-bar" style="height:${h}px" title="${t.date}: ${t.count} articles"></div>
+      <div class="tl-label">${label}</div>
+    </div>`;
+  }).join('');
+}
+
+// ---- KEYWORDS ----
+function renderKeywords(kws) {
+  const el = document.getElementById('keywordCloud');
+  const sorted = [...kws].sort((a,b)=>b.score-a.score).slice(0,30);
+  const max = sorted[0].score;
+  el.innerHTML = sorted.map(k=>{
+    const size = 0.62 + (k.score/max)*0.3;
+    const opacity = 0.5 + (k.score/max)*0.5;
+    return `<span class="kw-tag" style="font-size:${size}rem;opacity:${opacity}" title="${k.score}">${k.word}</span>`;
+  }).join('');
+}
+
+// ---- ARTICLES ----
+function articleCard(a) {
+  const dt = a.publishedAt ? new Date(a.publishedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+  const img = a.urlToImage
+    ? `<img class="article-img" src="${a.urlToImage}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+    : '';
+  const placeholder = `<div class="article-img-placeholder" ${a.urlToImage?'style="display:none"':''}>NO IMAGE</div>`;
+  return `
+    <div class="article-card" onclick="${a.url?`window.open('${a.url}','_blank')`:''}" >
+      ${img}${placeholder}
+      <div class="article-body">
+        <div class="article-meta">
+          <span class="article-source">${a.source||'unknown'}</span>
+          <span class="article-date">${dt}</span>
+        </div>
+        <div class="article-title">${a.title||'No title'}</div>
+        ${a.description?`<div class="article-desc">${a.description}</div>`:''}
+        <div class="article-footer">
+          <span class="sentiment-chip ${a.sentiment}">${a.sentiment}</span>
+          <span class="topic-chip" title="${a.topic}">${a.topic||''}</span>
+          ${a.url?`<a class="read-link" href="${a.url}" target="_blank" onclick="event.stopPropagation()">READ →</a>`:''}
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderArticles(articles) {
+  const el = document.getElementById('articlesGrid');
+  el.innerHTML = articles.map(articleCard).join('');
+}
+
+function populateFilters(articles) {
+  const topics = [...new Set(articles.map(a=>a.topic).filter(Boolean))];
+  const sources = [...new Set(articles.map(a=>a.source).filter(Boolean))].sort();
+  const tf = document.getElementById('topicFilter');
+  topics.forEach(t=>{ const o=document.createElement('option'); o.value=t; o.textContent=t; tf.appendChild(o); });
+  const sf = document.getElementById('sourceFilter');
+  sources.forEach(s=>{ const o=document.createElement('option'); o.value=s; o.textContent=s; sf.appendChild(o); });
+}
+
+function filterArticles() {
+  const search = document.getElementById('searchInput').value.toLowerCase();
+  const sent = document.getElementById('sentFilter').value;
+  const topic = document.getElementById('topicFilter').value;
+  const source = document.getElementById('sourceFilter').value;
+  let filtered = allData.articles.filter(a=>{
+    if(search && !a.title.toLowerCase().includes(search) && !(a.description||'').toLowerCase().includes(search)) return false;
+    if(sent && a.sentiment !== sent) return false;
+    if(topic && a.topic !== topic) return false;
+    if(source && a.source !== source) return false;
+    return true;
+  });
+  document.getElementById('articlesGrid').innerHTML = filtered.map(articleCard).join('');
+}
+
+// ---- TOPICS VIEW ----
+function renderTopics(keywords, counts, sentByTopic) {
+  const el = document.getElementById('topicsGrid');
+  el.innerHTML = Object.entries(keywords).map(([label, kws], i)=>{
+    const count = counts[label]||0;
+    const score = sentByTopic[label];
+    const scoreStr = score !== undefined ? (score >= 0.05 ? `+${score.toFixed(3)}` : score.toFixed(3)) : '—';
+    const scoreColor = score >= 0.05 ? 'var(--pos)' : score <= -0.05 ? 'var(--neg)' : 'var(--neu)';
+    return `<div class="topic-card">
+      <div class="topic-num">TOPIC ${String(i+1).padStart(2,'0')}</div>
+      <div class="topic-name">${label}</div>
+      <div class="topic-kws">${kws.map(k=>`<span class="topic-kw">${k}</span>`).join('')}</div>
+      <div class="topic-stats-row">
+        <div class="topic-stat"><div class="topic-stat-label">Articles</div><div class="topic-stat-val">${count}</div></div>
+        <div class="topic-stat"><div class="topic-stat-label">Avg Sentiment</div><div class="topic-stat-val" style="color:${scoreColor}">${scoreStr}</div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ---- SENTIMENT VIEW ----
+function renderSentiment(counts, sentByTopic, articles) {
+  // Overview bars
+  const total = Object.values(counts).reduce((a,b)=>a+b,0);
+  const colors = {Positive:'var(--pos)',Neutral:'var(--neu)',Negative:'var(--neg)'};
+  const sentEl = document.getElementById('sentOverview');
+  sentEl.innerHTML = ['Positive','Neutral','Negative'].filter(k=>counts[k]).map(k=>`
+    <div class="sent-bar-item">
+      <div class="sent-bar-header">
+        <span>${k}</span>
+        <span class="sent-score" style="color:${colors[k]}">${counts[k]} (${Math.round(counts[k]/total*100)}%)</span>
+      </div>
+      <div class="sent-bar-track">
+        <div class="sent-bar-fill" style="width:${counts[k]/total*100}%;background:${colors[k]}"></div>
+      </div>
+    </div>`).join('');
+
+  // By topic
+  const stEl = document.getElementById('sentByTopic');
+  const maxAbs = Math.max(...Object.values(sentByTopic).map(v=>Math.abs(v)));
+  stEl.innerHTML = Object.entries(sentByTopic).sort((a,b)=>b[1]-a[1]).map(([topic,score])=>{
+    const pct = Math.abs(score)/Math.max(maxAbs,0.001)*100;
+    const color = score>=0.05?'var(--pos)':score<=-0.05?'var(--neg)':'var(--neu)';
+    return `<div class="sent-bar-item">
+      <div class="sent-bar-header">
+        <span class="sent-bar-name" title="${topic}">${topic}</span>
+        <span class="sent-score" style="color:${color}">${score>=0?'+':''}${score.toFixed(3)}</span>
+      </div>
+      <div class="sent-bar-track">
+        <div class="sent-bar-fill" style="width:${pct}%;background:${color}"></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Sample articles sorted by score
+  const sorted = [...articles].sort((a,b)=>b.sentiment_score-a.sentiment_score);
+  const top5 = sorted.slice(0,4);
+  const bot5 = sorted.slice(-4).reverse();
+  const combined = [...top5, ...bot5];
+  document.getElementById('sentArticlesGrid').innerHTML = combined.map(articleCard).join('');
+}
+
+// ---- NAV ----
+function switchView(name) {
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>{
+    const names=['overview','articles','topics','sentiment'];
+    b.classList.toggle('active', names[i]===name);
+  });
+}
+
+// ---- REFRESH ----
+async function refreshData() {
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('spinning');
+  document.getElementById('loadingScreen').classList.remove('hidden');
+  await fetch(`${BASE}/api/refresh`, {method:'POST'});
+  setTimeout(poll, 1000);
+  setTimeout(()=>btn.classList.remove('spinning'), 3000);
+}
+
+poll();
+</script>
+</body>
+</html>

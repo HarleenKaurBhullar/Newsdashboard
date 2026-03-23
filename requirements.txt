@@ -1,0 +1,8 @@
+flask
+flask-cors
+newsapi-python
+scikit-learn
+nltk
+pandas
+numpy
+vaderSentiment
